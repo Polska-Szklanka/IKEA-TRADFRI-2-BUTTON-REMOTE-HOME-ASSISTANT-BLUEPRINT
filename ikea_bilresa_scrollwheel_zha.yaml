@@ -1,6 +1,6 @@
 blueprint:
-  name: ZHA - IKEA Bilresa (Fix 2 Lights & Wheel)
-  description: Działające sterowanie 2 światłami oraz jasnością/temperaturą w ZHA.
+  name: ZHA - IKEA Bilresa (Fix 2 Lights & Multi-Click)
+  description: Działające 1x, 2x i 3x kliknięcie oraz zmiana kółka w ZHA.
   domain: automation
   input:
     remote:
@@ -44,37 +44,87 @@ trigger:
 
 action:
   - variables:
+      remote_dev: !input remote
       cmd: "{{ trigger.event.data.command }}"
       args: "{{ trigger.event.data.args }}"
       active_light_entity: !input helper_active_light
       wheel_mode_entity: !input helper_wheel_mode
       active_num: "{{ states(active_light_entity) | int(1) }}"
       wheel_mode: "{{ states(wheel_mode_entity) }}"
-      # Przypisujemy obiekty target z !input do zmiennych
       target_l1: !input light_1
       target_l2: !input light_2
 
   - choose:
-      # --- 1. PRZYCISK ON (Włącz / Przełącz) ---
+      # --- 1. PRZYCISK ON (1x Klik / 2x Klik / 3x Klik) ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['on', 'toggle'] }}"
         sequence:
+          - wait_for_trigger:
+              - platform: event
+                event_type: zha_event
+                event_data:
+                  device_id: "{{ remote_dev }}"
+                  command: "on"
+            timeout:
+              milliseconds: 350
           - choose:
+              # 1x Klik -> Włącz/Przełącz aktywne światło
               - conditions:
                   - condition: template
-                    value_template: "{{ active_num == 1 }}"
+                    value_template: "{{ wait.trigger == none }}"
                 sequence:
-                  - service: light.toggle
-                    target: "{{ target_l1 }}"
-              - conditions:
-                  - condition: template
-                    value_template: "{{ active_num == 2 }}"
-                sequence:
-                  - service: light.toggle
-                    target: "{{ target_l2 }}"
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ active_num == 1 }}"
+                        sequence:
+                          - service: light.toggle
+                            target: "{{ target_l1 }}"
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ active_num == 2 }}"
+                        sequence:
+                          - service: light.toggle
+                            target: "{{ target_l2 }}"
 
-      # --- 2. PRZYCISK OFF (Wyłącz) ---
+              # Wykryto 2. kliknięcie
+              - conditions:
+                  - condition: template
+                    value_template: "{{ wait.trigger != none }}"
+                sequence:
+                  - wait_for_trigger:
+                      - platform: event
+                        event_type: zha_event
+                        event_data:
+                          device_id: "{{ remote_dev }}"
+                          command: "on"
+                    timeout:
+                      milliseconds: 350
+                  - choose:
+                      # 2x Klik -> Przełącz tryb kółka (Jasność <-> Temperatura)
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ wait.trigger == none }}"
+                        sequence:
+                          - service: input_select.select_option
+                            target:
+                              entity_id: !input helper_wheel_mode
+                            data:
+                              option: "{{ 'temperatura' if wheel_mode == 'jasnosc' else 'jasnosc' }}"
+
+                      # 3x Klik -> Przełącz wybrane światło (1 <-> 2)
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ wait.trigger != none }}"
+                        sequence:
+                          - service: input_number.set_value
+                            target:
+                              entity_id: !input helper_active_light
+                            data:
+                              value: "{{ 2 if active_num == 1 else 1 }}"
+
+      # --- 2. PRZYCISK OFF ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['off'] }}"
