@@ -50,6 +50,9 @@ action:
       wheel_mode_entity: !input helper_wheel_mode
       active_num: "{{ states(active_light_entity) | int(1) }}"
       wheel_mode: "{{ states(wheel_mode_entity) }}"
+      # Przypisujemy obiekty target z !input do zmiennych
+      target_l1: !input light_1
+      target_l2: !input light_2
 
   - choose:
       # --- 1. PRZYCISK ON (Włącz / Przełącz) ---
@@ -63,13 +66,13 @@ action:
                     value_template: "{{ active_num == 1 }}"
                 sequence:
                   - service: light.toggle
-                    target: !input light_1
+                    target: "{{ target_l1 }}"
               - conditions:
                   - condition: template
                     value_template: "{{ active_num == 2 }}"
                 sequence:
                   - service: light.toggle
-                    target: !input light_2
+                    target: "{{ target_l2 }}"
 
       # --- 2. PRZYCISK OFF (Wyłącz) ---
       - conditions:
@@ -82,13 +85,13 @@ action:
                     value_template: "{{ active_num == 1 }}"
                 sequence:
                   - service: light.turn_off
-                    target: !input light_1
+                    target: "{{ target_l1 }}"
               - conditions:
                   - condition: template
                     value_template: "{{ active_num == 2 }}"
                 sequence:
                   - service: light.turn_off
-                    target: !input light_2
+                    target: "{{ target_l2 }}"
 
       # --- 3. KÓŁKO (Move To Level) ---
       - conditions:
@@ -107,7 +110,7 @@ action:
                             value_template: "{{ active_num == 1 }}"
                         sequence:
                           - service: light.turn_on
-                            target: !input light_1
+                            target: "{{ target_l1 }}"
                             data:
                               brightness: "{{ args[0] }}"
                               transition: 0.1
@@ -116,7 +119,7 @@ action:
                             value_template: "{{ active_num == 2 }}"
                         sequence:
                           - service: light.turn_on
-                            target: !input light_2
+                            target: "{{ target_l2 }}"
                             data:
                               brightness: "{{ args[0] }}"
                               transition: 0.1
@@ -132,7 +135,7 @@ action:
                             value_template: "{{ active_num == 1 }}"
                         sequence:
                           - service: light.turn_on
-                            target: !input light_1
+                            target: "{{ target_l1 }}"
                             data:
                               color_temp: "{{ ((args[0] / 255.0) * (500 - 153) + 153) | int }}"
                               transition: 0.1
@@ -141,7 +144,7 @@ action:
                             value_template: "{{ active_num == 2 }}"
                         sequence:
                           - service: light.turn_on
-                            target: !input light_2
+                            target: "{{ target_l2 }}"
                             data:
                               color_temp: "{{ ((args[0] / 255.0) * (500 - 153) + 153) | int }}"
                               transition: 0.1
