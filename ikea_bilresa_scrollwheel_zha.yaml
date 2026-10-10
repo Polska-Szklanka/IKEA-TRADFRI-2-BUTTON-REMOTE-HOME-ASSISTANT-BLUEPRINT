@@ -1,6 +1,6 @@
 blueprint:
-  name: ZHA - IKEA Bilresa (1 Lampa - Płynna Jasność)
-  description: Proste sterowanie jedną lampą z płynniejszą regulacją jasności z kółka.
+  name: ZHA - IKEA Bilresa (Reakcja bez skoków jasności)
+  description: Szybka reakcja na przyciski oraz poprawna obsługa kółka po zmianie jasności z innych źródeł.
   domain: automation
   input:
     remote:
@@ -28,37 +28,34 @@ action:
   - variables:
       cmd: "{{ trigger.event.data.command }}"
       args: "{{ trigger.event.data.args }}"
-      target_l: !input target_light
+      # Pobieramy ID encji z selektora target
+      target_entity: "{{ (input('target_light').entity_id if input('target_light').entity_id is defined else input('target_light')) }}"
       level_val: "{{ args[0] | int(0) if args else 0 }}"
-      current_brightness: "{{ state_attr(target_l.entity_id, 'brightness') | int(0) }}"
 
   - choose:
-      # --- 1. PRZYCISK ON ---
+      # --- 1. PRZYCISK ON / TOGGLE ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['on', 'toggle'] }}"
         sequence:
-          - service: light.toggle
-            target: "{{ target_l }}"
+          - action: light.toggle
+            target: !input target_light
 
       # --- 2. PRZYCISK OFF ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['off'] }}"
         sequence:
-          - service: light.turn_off
-            target: "{{ target_l }}"
+          - action: light.turn_off
+            target: !input target_light
 
-      # --- 3. OBRÓT KÓŁKA (Ściemnianie / Rozjaśnianie) ---
+      # --- 3. OBRÓT KÓŁKA ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['move_to_level', 'move_to_level_with_on_off'] }}"
         sequence:
-          # Reaguj tylko, jeśli zmiana jest większa niż 5 jednostek (zapobiega gwałtownym skokom)
-          - condition: template
-            value_template: "{{ (level_val - current_brightness) | abs > 5 }}"
-          - service: light.turn_on
-            target: "{{ target_l }}"
+          - action: light.turn_on
+            target: !input target_light
             data:
               brightness: "{{ level_val }}"
-              transition: 0.4
+              transition: 0.1
