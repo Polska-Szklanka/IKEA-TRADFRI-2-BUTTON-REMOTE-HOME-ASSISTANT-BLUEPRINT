@@ -49,16 +49,23 @@ action:
           - service: light.turn_off
             target: "{{ target_l }}"
 
-      # --- 3. OBRÓT KÓŁKA (Ściemnianie / Rozjaśnianie) ---
+# --- 3. OBRÓT KÓŁKA (Ściemnianie / Rozjaśnianie względne) ---
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['move_to_level', 'move_to_level_with_on_off'] }}"
+            value_template: "{{ cmd in ['step', 'brightness_step', 'move', 'brightness_move'] }}"
         sequence:
-          # Reaguj tylko, jeśli zmiana jest większa niż 5 jednostek (zapobiega gwałtownym skokom)
-          - condition: template
-            value_template: "{{ (level_val - current_brightness) | abs > 5 }}"
-          - service: light.turn_on
-            target: "{{ target_l }}"
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
             data:
-              brightness: "{{ level_val }}"
-              transition: 0.4
+              brightness: >
+                {% set current = state_attr(light_entity, 'brightness') | int(0) %}
+                {# Sprawdzamy kierunek z argumentów pilota (up/down lub krok) #}
+                {% set direction = args[0] if args is defined and args|length > 0 else 'up' %}
+                {% set step_size = 25 %}
+                {% if direction in [0, 'up', 'Increase'] or (args|length > 1 and args[0] == 0) %}
+                  {{ [current + step_size, 255] | min }}
+                {% else %}
+                  {{ [current - step_size, 0] | max }}
+                {% endif %}
+              transition: 0.1
