@@ -54,7 +54,7 @@ action:
           - condition: template
             value_template: "{{ cmd in ['step', 'brightness_step', 'move', 'brightness_move'] }}"
         sequence:
-          - action: light.turn_on
+          - action: light.toggle
             target:
               entity_id: "{{ light_entity }}"
             data:
