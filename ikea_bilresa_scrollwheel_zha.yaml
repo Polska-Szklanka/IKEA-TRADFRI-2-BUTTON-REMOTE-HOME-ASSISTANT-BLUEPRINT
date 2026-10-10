@@ -46,7 +46,7 @@ action:
           - condition: template
             value_template: "{{ cmd in ['off'] }}"
         sequence:
-          - service: light.turn_off
+          - service: light.toggle
             target: "{{ target_l }}"
 
 # --- 3. OBRÓT KÓŁKA (Ściemnianie / Rozjaśnianie względne) ---
