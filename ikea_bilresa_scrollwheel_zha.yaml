@@ -27,38 +27,24 @@ trigger:
 action:
   - variables:
       cmd: "{{ trigger.event.data.command }}"
-      args: "{{ trigger.event.data.args }}"
-      target_l: !input target_light
-      level_val: "{{ args[0] | int(0) if args else 0 }}"
-      current_brightness: "{{ state_attr(target_l.entity_id, 'brightness') | int(0) }}"
+      level: "{{ (trigger.event.data.params.level | default(1, true)) | int(1) }}"
 
   - choose:
-      # --- 1. PRZYCISK ON ---
+      # Button press -> toggle (works regardless of the remote's own on/off state)
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['on', 'toggle'] }}"
+            value_template: "{{ cmd in ['on', 'off', 'toggle'] }}"
         sequence:
-          - service: light.toggle
-            target: "{{ target_l }}"
+          - action: light.toggle
+            target: !input target_light
 
-      # --- 2. PRZYCISK OFF ---
+      # Dial rotation -> the remote sends an absolute level, so set it directly
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['off'] }}"
+            value_template: "{{ cmd == 'move_to_level' }}"
         sequence:
-          - service: light.turn_off
-            target: "{{ target_l }}"
-
-      # --- 3. OBRÓT KÓŁKA (Ściemnianie / Rozjaśnianie) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ cmd in ['move_to_level', 'move_to_level_with_on_off'] }}"
-        sequence:
-          # Reaguj tylko, jeśli zmiana jest większa niż 5 jednostek (zapobiega gwałtownym skokom)
-          - condition: template
-            value_template: "{{ (level_val - current_brightness) | abs > 5 }}"
-          - service: light.turn_on
-            target: "{{ target_l }}"
+          - action: light.turn_on
+            target: !input target_light
             data:
-              brightness: "{{ level_val }}"
-              transition: 0.4
+              brightness: "{{ [[level, 1] | max, 255] | min }}"
+              transition: 0.3
