@@ -28,43 +28,37 @@ action:
   - variables:
       cmd: "{{ trigger.event.data.command }}"
       args: "{{ trigger.event.data.args }}"
-      target_l: !input target_light
-      light_entity: "{{ target_l.entity_id if target_l.entity_id is defined else target_l }}"
-      current_brightness: "{{ state_attr(light_entity, 'brightness') | int(0) }}"
+      params: "{{ trigger.event.data.params | default({}, true) }}"
+      going_down: >-
+        {%- if params is mapping and params.step_mode is defined -%}
+          {% set m = params.step_mode %}
+        {%- elif params is mapping and params.move_mode is defined -%}
+          {% set m = params.move_mode %}
+        {%- elif args is sequence and args is not string and args | length > 0 -%}
+          {% set m = args[0] %}
+        {%- else -%}
+          {% set m = 0 %}
+        {%- endif -%}
+        {{ m | string | lower in ['1', 'down', 'decrease'] }}
 
   - choose:
-      # --- 1. PRZYCISK ON (używa toggle, żeby nie gryźć się z innym pilotem) ---
+      # Any button press -> toggle (ignores the remote's own on/off state)
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['on', 'toggle'] }}"
+            value_template: "{{ cmd in ['on', 'off', 'toggle'] }}"
         sequence:
-          - service: light.toggle
-            target: "{{ target_l }}"
+          - action: light.toggle
+            target: !input target_light
 
-      # --- 2. PRZYCISK OFF (też toggle, żeby działało uniwersalnie) ---
+      # Dial rotation -> relative brightness change
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['off'] }}"
-        sequence:
-          - service: light.toggle
-            target: "{{ target_l }}"
-
-      # --- 3. OBRÓT KÓŁKA (Musi być turn_on, bo toggle nie przyjmuje jasności) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ cmd in ['step', 'brightness_step', 'move', 'brightness_move'] }}"
+            value_template: >
+              {{ cmd in ['step', 'step_with_on_off', 'move', 'move_with_on_off',
+                         'brightness_step', 'brightness_move'] }}
         sequence:
           - action: light.turn_on
-            target:
-              entity_id: "{{ light_entity }}"
+            target: !input target_light
             data:
-              brightness: >
-                {% set current = current_brightness %}
-                {% set direction = args[0] if args is defined and args|length > 0 else 'up' %}
-                {% set step_size = 25 %}
-                {% if direction in [0, 'up', 'Increase'] or (args|length > 1 and args[0] == 0) %}
-                  {{ [current + step_size, 255] | min }}
-                {% else %}
-                  {{ [current - step_size, 0] | max }}
-                {% endif %}
+              brightness_step: "{{ -25 if going_down else 25 }}"
               transition: 0.1
