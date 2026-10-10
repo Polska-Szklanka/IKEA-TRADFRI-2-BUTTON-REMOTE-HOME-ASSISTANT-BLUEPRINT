@@ -25,18 +25,11 @@ trigger:
       device_id: !input remote
 
 action:
-  - variables:
-      cmd: "{{ trigger.event.data.command }}"
-      args: "{{ trigger.event.data.args }}"
-      # Pobieramy ID encji z selektora target
-      target_entity: "{{ (input('target_light').entity_id if input('target_light').entity_id is defined else input('target_light')) }}"
-      level_val: "{{ args[0] | int(0) if args else 0 }}"
-
   - choose:
       # --- 1. PRZYCISK ON / TOGGLE ---
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['on', 'toggle'] }}"
+            value_template: "{{ trigger.event.data.command in ['on', 'toggle'] }}"
         sequence:
           - action: light.toggle
             target: !input target_light
@@ -44,7 +37,7 @@ action:
       # --- 2. PRZYCISK OFF ---
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['off'] }}"
+            value_template: "{{ trigger.event.data.command in ['off'] }}"
         sequence:
           - action: light.turn_off
             target: !input target_light
@@ -52,10 +45,10 @@ action:
       # --- 3. OBRÓT KÓŁKA ---
       - conditions:
           - condition: template
-            value_template: "{{ cmd in ['move_to_level', 'move_to_level_with_on_off'] }}"
+            value_template: "{{ trigger.event.data.command in ['move_to_level', 'move_to_level_with_on_off'] }}"
         sequence:
           - action: light.turn_on
             target: !input target_light
             data:
-              brightness: "{{ level_val }}"
+              brightness: "{{ trigger.event.data.args[0] | int(0) if trigger.event.data.args else 0 }}"
               transition: 0.1
