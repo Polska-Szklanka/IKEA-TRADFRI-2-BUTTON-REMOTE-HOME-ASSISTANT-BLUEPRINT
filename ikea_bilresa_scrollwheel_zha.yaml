@@ -1,6 +1,6 @@
 blueprint:
-  name: ZHA - IKEA Bilresa (Fix 2 Lights & Multi-Click)
-  description: Działające 1x, 2x i 3x kliknięcie oraz zmiana kółka w ZHA.
+  name: ZHA - IKEA Bilresa (1 Lampa - Płynna Jasność)
+  description: Proste sterowanie jedną lampą z płynniejszą regulacją jasności z kółka.
   domain: automation
   input:
     remote:
@@ -8,30 +8,12 @@ blueprint:
       selector:
         device:
           integration: zha
-    light_1:
-      name: Światło 1
+    target_light:
+      name: Lampa
       selector:
         target:
           entity:
             domain: light
-    light_2:
-      name: Światło 2
-      selector:
-        target:
-          entity:
-            domain: light
-    helper_active_light:
-      name: Pomocnik wybranego światła
-      description: Wybierz input_number.bilresa_wybrane_swiatlo
-      selector:
-        entity:
-          domain: input_number
-    helper_wheel_mode:
-      name: Pomocnik trybu kółka
-      description: Wybierz input_select.bilresa_tryb_kolka
-      selector:
-        entity:
-          domain: input_select
 
 mode: restart
 max_exceeded: silent
@@ -44,157 +26,39 @@ trigger:
 
 action:
   - variables:
-      remote_dev: !input remote
       cmd: "{{ trigger.event.data.command }}"
       args: "{{ trigger.event.data.args }}"
-      active_light_entity: !input helper_active_light
-      wheel_mode_entity: !input helper_wheel_mode
-      active_num: "{{ states(active_light_entity) | int(1) }}"
-      wheel_mode: "{{ states(wheel_mode_entity) }}"
-      target_l1: !input light_1
-      target_l2: !input light_2
+      target_l: !input target_light
+      level_val: "{{ args[0] | int(0) if args else 0 }}"
+      current_brightness: "{{ state_attr(target_l.entity_id, 'brightness') | int(0) }}"
 
   - choose:
-      # --- 1. PRZYCISK ON (1x Klik / 2x Klik / 3x Klik) ---
+      # --- 1. PRZYCISK ON ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['on', 'toggle'] }}"
         sequence:
-          - wait_for_trigger:
-              - platform: event
-                event_type: zha_event
-                event_data:
-                  device_id: "{{ remote_dev }}"
-                  command: "on"
-            timeout:
-              milliseconds: 350
-          - choose:
-              # 1x Klik -> Włącz/Przełącz aktywne światło
-              - conditions:
-                  - condition: template
-                    value_template: "{{ wait.trigger == none }}"
-                sequence:
-                  - choose:
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ active_num == 1 }}"
-                        sequence:
-                          - service: light.toggle
-                            target: "{{ target_l1 }}"
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ active_num == 2 }}"
-                        sequence:
-                          - service: light.toggle
-                            target: "{{ target_l2 }}"
-
-              # Wykryto 2. kliknięcie
-              - conditions:
-                  - condition: template
-                    value_template: "{{ wait.trigger != none }}"
-                sequence:
-                  - wait_for_trigger:
-                      - platform: event
-                        event_type: zha_event
-                        event_data:
-                          device_id: "{{ remote_dev }}"
-                          command: "on"
-                    timeout:
-                      milliseconds: 350
-                  - choose:
-                      # 2x Klik -> Przełącz tryb kółka (Jasność <-> Temperatura)
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ wait.trigger == none }}"
-                        sequence:
-                          - service: input_select.select_option
-                            target:
-                              entity_id: !input helper_wheel_mode
-                            data:
-                              option: "{{ 'temperatura' if wheel_mode == 'jasnosc' else 'jasnosc' }}"
-
-                      # 3x Klik -> Przełącz wybrane światło (1 <-> 2)
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ wait.trigger != none }}"
-                        sequence:
-                          - service: input_number.set_value
-                            target:
-                              entity_id: !input helper_active_light
-                            data:
-                              value: "{{ 2 if active_num == 1 else 1 }}"
+          - service: light.toggle
+            target: "{{ target_l }}"
 
       # --- 2. PRZYCISK OFF ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['off'] }}"
         sequence:
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ active_num == 1 }}"
-                sequence:
-                  - service: light.turn_off
-                    target: "{{ target_l1 }}"
-              - conditions:
-                  - condition: template
-                    value_template: "{{ active_num == 2 }}"
-                sequence:
-                  - service: light.turn_off
-                    target: "{{ target_l2 }}"
+          - service: light.turn_off
+            target: "{{ target_l }}"
 
-      # --- 3. KÓŁKO (Move To Level) ---
+      # --- 3. OBRÓT KÓŁKA (Ściemnianie / Rozjaśnianie) ---
       - conditions:
           - condition: template
             value_template: "{{ cmd in ['move_to_level', 'move_to_level_with_on_off'] }}"
         sequence:
-          - choose:
-              # Tryb 1: JASNOŚĆ
-              - conditions:
-                  - condition: template
-                    value_template: "{{ wheel_mode == 'jasnosc' }}"
-                sequence:
-                  - choose:
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ active_num == 1 }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: "{{ target_l1 }}"
-                            data:
-                              brightness: "{{ args[0] }}"
-                              transition: 0.1
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ active_num == 2 }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: "{{ target_l2 }}"
-                            data:
-                              brightness: "{{ args[0] }}"
-                              transition: 0.1
-
-              # Tryb 2: TEMPERATURA BARWY
-              - conditions:
-                  - condition: template
-                    value_template: "{{ wheel_mode == 'temperatura' }}"
-                sequence:
-                  - choose:
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ active_num == 1 }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: "{{ target_l1 }}"
-                            data:
-                              color_temp: "{{ ((args[0] / 255.0) * (500 - 153) + 153) | int }}"
-                              transition: 0.1
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ active_num == 2 }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: "{{ target_l2 }}"
-                            data:
-                              color_temp: "{{ ((args[0] / 255.0) * (500 - 153) + 153) | int }}"
-                              transition: 0.1
+          # Reaguj tylko, jeśli zmiana jest większa niż 5 jednostek (zapobiega gwałtownym skokom)
+          - condition: template
+            value_template: "{{ (level_val - current_brightness) | abs > 5 }}"
+          - service: light.turn_on
+            target: "{{ target_l }}"
+            data:
+              brightness: "{{ level_val }}"
+              transition: 0.4
