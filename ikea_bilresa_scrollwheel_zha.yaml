@@ -41,14 +41,23 @@ action:
         {%- endif -%}
         {{ m | string | lower in ['1', 'down', 'decrease'] }}
 
-  - choose:
-      # Any button press -> toggle (ignores the remote's own on/off state)
-      - conditions:
-          - condition: template
-            value_template: "{{ cmd in ['on', 'off', 'toggle'] }}"
-        sequence:
-          - action: light.toggle
-            target: !input target_light
+choose:
+# --- 1. PRZYCISK ON ---
+conditions:
+condition: template
+      value_template: "{{ cmd in ['on', 'toggle'] }}"
+  sequence:
+service: light.toggle
+    target: "{{ target_l }}"
+
+      # --- 2. PRZYCISK OFF ---
+      
+conditions:
+condition: template
+        value_template: "{{ cmd in ['off'] }}"
+    sequence:
+service: light.turn_off
+      target: "{{ target_l }}"
 
       # Dial rotation -> relative brightness change
       - conditions:
